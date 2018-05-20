@@ -11,6 +11,7 @@ import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Base64;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -26,6 +27,7 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 
 public class MainActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
@@ -39,38 +41,42 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     private ArrayList<Question> mQuestionArrayList;
     private QuestionsListAdapter mAdapter;
 
-    private ChildEventListener mEventListener = new ChildEventListener() { //データに変更があった時に呼ばれる
+    private ChildEventListener mEventListener = new ChildEventListener() {
         @Override
-        public void onChildAdded(DataSnapshot dataSnapshot, String s) { //データ（質問）が追加された時の処理
-            HashMap map = (HashMap) dataSnapshot.getValue(); //データをgetValueで取得して、mapに格納
-            String title = (String) map.get("title"); //mapからtitleキーの値を取り出し、titleに格納。以下同
+        /*onChildAdded() コールバックは通常、Firebase データベース内のアイテムのリストを取得するために使用します。
+        onChildAdded() コールバックは既存の子ごとに 1 回トリガーされます。さらに、指定されたパスに新しい子が追加されると、
+        そのたびに再びトリガーされます。リスナーには、新しい子のデータを含んでいるスナップショットが渡されます。*/
+        public void onChildAdded(DataSnapshot dataSnapshot, String s) {
+            HashMap map = (HashMap) dataSnapshot.getValue();
+            String title = (String) map.get("title");
             String body = (String) map.get("body");
             String name = (String) map.get("name");
             String uid = (String) map.get("uid");
             String imageString = (String) map.get("image");
             byte[] bytes;
             if (imageString != null) {
-                bytes = Base64.decode(imageString, Base64.DEFAULT); //画像があった場合はデコードしてbyte型配列に格納
+                bytes = Base64.decode(imageString, Base64.DEFAULT);
             } else {
                 bytes = new byte[0];
             }
 
-            ArrayList<Answer> answerArrayList = new ArrayList<Answer>(); //Answer型のリスト
-            HashMap answerMap = (HashMap) map.get("answers"); //回答を保持するためのmap
+            ArrayList<Answer> answerArrayList = new ArrayList<Answer>();
+            HashMap answerMap = (HashMap) map.get("answers");
             if (answerMap != null) {
-                for (Object key : answerMap.keySet()) { //keySetでanswerMapの全てのキーを取得し、処理を回す
-                    HashMap temp = (HashMap) answerMap.get((String) key); //処理の内容としては、tempに、保持した回答のデータを格納し？
-                    String answerBody = (String) temp.get("body"); //そこからbody,name,uidキーの値を取り出し、
+                for (Object key : answerMap.keySet()) {
+                    HashMap temp = (HashMap) answerMap.get((String) key);
+                    String answerBody = (String) temp.get("body");
                     String answerName = (String) temp.get("name");
                     String answerUid = (String) temp.get("uid");
-                    Answer answer = new Answer(answerBody, answerName, answerUid, (String) key); //Answer型の変数に格納。
-                    answerArrayList.add(answer); //さらにそれをAnswer型のリストに格納。さらにそれはあとでquestionインスタンスに与えられ、Question型のリストに渡る。
+                    Answer answer = new Answer(answerBody, answerName, answerUid, (String) key);
+                    answerArrayList.add(answer);
                 }
             }
 
             Question question = new Question(title, body, name, uid, dataSnapshot.getKey(), mGenre, bytes, answerArrayList);
             mQuestionArrayList.add(question);
-            mAdapter.notifyDataSetChanged(); //アダプターにデータの変更を知らせてリスト全体を更新。
+            mAdapter.notifyDataSetChanged();
+            //System.out.println("リスナー内" + Arrays.toString(mQuestionArrayList.toArray()));
         }
 
         @Override
@@ -176,7 +182,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             }
         });
 
-    }
+    }//onCreate/
 
     @Override
     protected void onResume() {
@@ -188,16 +194,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             onNavigationItemSelected(navigationView.getMenu().getItem(0));
         }
 
-        //ログインしていない時はメニューのお気に入りへの遷移ボタンを隠す
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
-        Menu menu = navigationView.getMenu();
-        MenuItem item = menu.findItem(R.id.nav_favorite);
-        if (user == null) {
-            item.setVisible(false);
-        } else {
-            item.setVisible(true);
-        }
+        //System.out.println(Arrays.toString(mQuestionArrayList.toArray()));
     }
 
     @Override
@@ -211,6 +208,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
 
+        //仕様外追記：ログインしていない時に設定ボタンをクリックするとログイン画面へ
         if (id == R.id.action_settings) {
             FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
             if (user == null) {
@@ -222,7 +220,6 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                 startActivity(intent);
                 return true;
             }
-
         }
 
         return super.onOptionsItemSelected(item);
@@ -251,6 +248,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
         // 質問のリストをクリアしてから再度Adapterにセットし、AdapterをListViewにセットし直す
         mQuestionArrayList.clear();
+        //System.out.println(Arrays.toString(mQuestionArrayList.toArray()));
         mAdapter.setQuestionArrayList(mQuestionArrayList);
         mListView.setAdapter(mAdapter);
 
@@ -262,9 +260,5 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         mGenreRef.addChildEventListener(mEventListener);
 
         return true;
-
-        /*if (id == R.id.nav_favorite) {
-            Intent intent = new Intent();
-        }*/
     }
 }

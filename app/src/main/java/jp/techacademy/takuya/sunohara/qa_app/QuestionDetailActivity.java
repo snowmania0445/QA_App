@@ -5,6 +5,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.ListView;
 
@@ -16,6 +17,7 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,12 +26,12 @@ public class QuestionDetailActivity extends AppCompatActivity {
     private ListView mListView;
     private Question mQuestion;
     private QuestionDetailListAdapter mAdapter;
-
     private DatabaseReference mAnswerRef;
+    //追記
     private DatabaseReference mFavoriteRef;
-    private DatabaseReference mFavoriteUserRef;
-
-    private Boolean favoriteFlag = false;
+    private boolean favoriteFlag;
+    private FavoriteData favoriteData;
+    private ArrayList<Favorite> mFavoriteArrayList;
 
     private ChildEventListener mEventListener = new ChildEventListener() {
         @Override
@@ -75,20 +77,17 @@ public class QuestionDetailActivity extends AppCompatActivity {
         }
     };
 
-    //追記：お気に入り追加のリスナー
-    private ChildEventListener mFavoriteListener = new ChildEventListener() {
+    //追記
+    private ChildEventListener mFavoriteEventListener = new ChildEventListener() {
         @Override
         public void onChildAdded(DataSnapshot dataSnapshot, String s) {
-            String favoriteUid = dataSnapshot.getKey();
-            if (favoriteUid != null) {
-                //データが保存されていたら、flagをtrueにしてアイコンを黄色に変更
-                favoriteFlag = true;
-                setStar();
-            } else {
-                //データがなければflagをfalseにしてアイコンを白に
-                favoriteFlag = false;
-                removeStar();
-            }
+            HashMap map = (HashMap) dataSnapshot.getValue();
+
+            String questionUid = dataSnapshot.getKey();
+            String title = (String) map.get("title");
+
+            Favorite favorite = new Favorite(title, questionUid);
+            favoriteData.setFavoriteArrayList(favorite);
         }
 
         @Override
@@ -98,14 +97,10 @@ public class QuestionDetailActivity extends AppCompatActivity {
 
         @Override
         public void onChildRemoved(DataSnapshot dataSnapshot) {
-            String favoriteUid = dataSnapshot.getKey();
-            if (favoriteUid != null) {
-                favoriteFlag = false;
-                removeStar();
-            } else {
-                favoriteFlag = true;
-                setStar();
-            }
+            HashMap map = (HashMap) dataSnapshot.getValue();
+            String questionUid = dataSnapshot.getKey();
+            favoriteData.removeFavoriteData(questionUid);
+
         }
 
         @Override
@@ -156,14 +151,17 @@ public class QuestionDetailActivity extends AppCompatActivity {
             }
         });
 
-        DatabaseReference dataBaseReference = FirebaseDatabase.getInstance().getReference();
-        mAnswerRef = dataBaseReference.child(Const.ContentsPATH).child(String.valueOf(mQuestion.getGenre())).child(mQuestion.getQuestionUid()).child(Const.AnswersPATH); //contents/ジャンル/質問のID/回答のID/ というパスを指定して、
-        mAnswerRef.addChildEventListener(mEventListener); //リスナーを登録して、回答が追加されたら上記パスに保存されるようにする
-    }
 
-    //追記：
-    @Override protected void onResume() {
+        DatabaseReference dataBaseReference = FirebaseDatabase.getInstance().getReference();
+        mAnswerRef = dataBaseReference.child(Const.ContentsPATH).child(String.valueOf(mQuestion.getGenre())).child(mQuestion.getQuestionUid()).child(Const.AnswersPATH);
+        mAnswerRef.addChildEventListener(mEventListener);
+    }//onCreate/
+
+    //追記
+    @Override
+    protected void onResume() {
         super.onResume();
+
         FloatingActionButton fav = (FloatingActionButton) findViewById(R.id.favorite);
         //ログイン済みのユーザーを取得
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
@@ -171,10 +169,22 @@ public class QuestionDetailActivity extends AppCompatActivity {
             // ログインしていない時はお気に入りボタンを隠す
             fav.setVisibility(View.INVISIBLE);
         } else {
+            //todo
+            //お気に入りデータを保持するクラスからデータを取得して、フラグの変更を行う。
+            String uid = mQuestion.getQuestionUid();
+            favoriteFlag = false;
+            favoriteData = (FavoriteData)this.getApplication();
+            mFavoriteArrayList = favoriteData.getFavoriteArrayList();
+            if (mFavoriteArrayList != null) {
+                for (Favorite favorite : mFavoriteArrayList) {
+                    if (favorite.getQuestionUid().equals(uid)) {
+                        favoriteFlag = true;
+                    }
+                };
+            }
 
             DatabaseReference dataBaseReference = FirebaseDatabase.getInstance().getReference();
             mFavoriteRef = dataBaseReference.child(Const.FavoritePATH).child(user.getUid()).child(mQuestion.getQuestionUid());
-            mFavoriteUserRef = dataBaseReference.child(Const.FavoritePATH).child(user.getUid()).get
 
             fav.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -184,21 +194,26 @@ public class QuestionDetailActivity extends AppCompatActivity {
                         Map<String, String> data = new HashMap<String, String>();
 
                         data.put("title", mQuestion.getTitle());
-                        data.put("body", mQuestion.getBody());
-                        data.put("name", mQuestion.getName());
+                        data.put("questionUid", mQuestion.getQuestionUid());
 
                         mFavoriteRef.setValue(data);
+                        setStar();
+                        favoriteFlag = true;
 
                     } else {
                         //flagがtrue＝登録済みの場合は、データを削除
                         mFavoriteRef.removeValue();
+                        removeStar();
                     }
+
+                    if (mFavoriteRef != null) {
+                        mFavoriteRef.removeEventListener(mFavoriteEventListener);
+                    }
+                    mFavoriteRef.addChildEventListener(mFavoriteEventListener);
                 }
             });
-
-            mFavoriteRef.addChildEventListener(mFavoriteListener);
         }
-    }
+    }//onResume/
 
     private void setStar() {
         FloatingActionButton fav = (FloatingActionButton)findViewById(R.id.favorite);
